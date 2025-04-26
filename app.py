@@ -1,60 +1,33 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import cv2
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import JSONResponse
+from fer import FER
 import numpy as np
-from PIL import Image
-from keras.models import load_model
-from keras.optimizers import Adam
-from keras.utils import get_custom_objects
-import os
+import cv2
+from io import BytesIO
 
-# === FIX for old 'lr' in Adam optimizer ===
-def legacy_adam_optimizer(*args, **kwargs):
-    if 'lr' in kwargs:
-        kwargs['learning_rate'] = kwargs.pop('lr')
-    return Adam(*args, **kwargs)
+app = FastAPI()
 
-get_custom_objects()['Adam'] = legacy_adam_optimizer
+# Load the FER detector
+emotion_detector = FER(mtcnn=True)
 
-# === Load the pre-trained model ===
-emotion_model = load_model('emotion_model.hdf5')
+@app.post("/emotion-detect")
+async def detect_emotion(image: UploadFile = File(...)):
+    # Read the uploaded image file
+    image_bytes = await image.read()
+    npimg = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-# === Create Flask app ===
-app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend access
+    # Detect emotions
+    result = emotion_detector.detect_emotions(img)
 
-# === Define emotion labels ===
-emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
+    if not result:
+        return JSONResponse(content={"error": "No face detected"}, status_code=400)
 
-@app.route('/emotion-detect', methods=['POST'])
-def detect_emotion():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
+    # Assume the first face detected
+    emotions = result[0]["emotions"]
+    top_emotion = max(emotions, key=emotions.get)
 
-    file = request.files['image']
-    image = Image.open(file.stream).convert('RGB')
-    image_np = np.array(image)
-
-    # Convert to grayscale for face detection
-    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-    
-    # Resize for the model input
-    resized = cv2.resize(gray, (48, 48))
-    resized = resized.astype('float32') / 255.0
-    resized = np.expand_dims(resized, axis=-1)
-    resized = np.expand_dims(resized, axis=0)  # Add batch dimension
-
-    # Predict emotion
-    predictions = emotion_model.predict(resized)
-    emotion_idx = np.argmax(predictions)
-    emotion = emotion_labels[emotion_idx]
-    confidence = float(np.max(predictions))
-
-    return jsonify({
-        'emotion': emotion,
-        'confidence': round(confidence, 2)
-    })
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    return {
+        "top_emotion": top_emotion,
+        "all_emotions": emotions
+    }
