@@ -1,6 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
-from fer import FER
 import numpy as np
 import cv2
 from io import BytesIO
