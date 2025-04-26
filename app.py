@@ -1,14 +1,21 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # <--- ADD THIS
+from flask_cors import CORS
 import cv2
 import numpy as np
 from PIL import Image
 import os
+from tensorflow.keras.models import load_model
 
+# Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # <--- ADD THIS
+CORS(app)
 
+# Load models
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+emotion_model = load_model('emotion_model.h5')  # <- load your pre-trained emotion detection model
+
+# Emotion labels based on training
+emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
 
 @app.route('/emotion-detect', methods=['POST'])
 def detect_emotion():
@@ -27,19 +34,21 @@ def detect_emotion():
     if len(faces) == 0:
         return jsonify({'error': 'No face detected'}), 200
 
-    (x, y, w, h) = faces[0]
-    face_area = w * h
+    (x, y, w, h) = faces[0]  # only first face for now
+    face_roi = gray[y:y+h, x:x+w]
+    face_resized = cv2.resize(face_roi, (48, 48))  # most emotion models are trained on 48x48
+    face_normalized = face_resized / 255.0
+    face_reshaped = np.reshape(face_normalized, (1, 48, 48, 1))
 
-    if face_area > 10000:
-        emotion = "Happy"
-    elif face_area > 5000:
-        emotion = "Neutral"
-    else:
-        emotion = "Surprised"
+    # Predict emotion
+    prediction = emotion_model.predict(face_reshaped)
+    emotion_index = np.argmax(prediction)
+    emotion = emotion_labels[emotion_index]
+    confidence = float(np.max(prediction))
 
     return jsonify({
         'emotion': emotion,
-        'confidence': 0.9
+        'confidence': confidence
     })
 
 if __name__ == "__main__":
