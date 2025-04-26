@@ -1,5 +1,5 @@
 Flask==2.2.3
 opencv-python-headless==4.6.0.66
 Pillow==9.0.1
-fer==1.0.1
+fer==22.5.1
 numpy==1.21.4
