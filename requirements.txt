@@ -3,3 +3,4 @@ opencv-python-headless==4.6.0.66
 Pillow==9.0.1
 fer==22.5.1
 numpy>=1.26,<2.0
+gunicorn
