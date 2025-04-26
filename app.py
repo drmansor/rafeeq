@@ -3,18 +3,27 @@ from flask_cors import CORS
 import cv2
 import numpy as np
 from PIL import Image
+from keras.models import load_model
+from keras.optimizers import Adam
+from keras.utils import get_custom_objects
 import os
-from tensorflow.keras.models import load_model
 
-# Initialize Flask app
+# === FIX for old 'lr' in Adam optimizer ===
+def legacy_adam_optimizer(*args, **kwargs):
+    if 'lr' in kwargs:
+        kwargs['learning_rate'] = kwargs.pop('lr')
+    return Adam(*args, **kwargs)
+
+get_custom_objects()['Adam'] = legacy_adam_optimizer
+
+# === Load the pre-trained model ===
+emotion_model = load_model('emotion_model.hdf5')
+
+# === Create Flask app ===
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Enable CORS for frontend access
 
-# Load models
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-emotion_model = load_model('emotion_model.hdf5')  # <- load your pre-trained emotion detection model
-
-# Emotion labels based on training
+# === Define emotion labels ===
 emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
 
 @app.route('/emotion-detect', methods=['POST'])
@@ -23,34 +32,29 @@ def detect_emotion():
         return jsonify({'error': 'No image uploaded'}), 400
 
     file = request.files['image']
-    image = Image.open(file.stream).convert("RGB")
+    image = Image.open(file.stream).convert('RGB')
     image_np = np.array(image)
 
-    image_resized = cv2.resize(image_np, (224, 224))
-    gray = cv2.cvtColor(image_resized, cv2.COLOR_RGB2GRAY)
-
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
-
-    if len(faces) == 0:
-        return jsonify({'error': 'No face detected'}), 200
-
-    (x, y, w, h) = faces[0]  # only first face for now
-    face_roi = gray[y:y+h, x:x+w]
-    face_resized = cv2.resize(face_roi, (48, 48))  # most emotion models are trained on 48x48
-    face_normalized = face_resized / 255.0
-    face_reshaped = np.reshape(face_normalized, (1, 48, 48, 1))
+    # Convert to grayscale for face detection
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+    
+    # Resize for the model input
+    resized = cv2.resize(gray, (48, 48))
+    resized = resized.astype('float32') / 255.0
+    resized = np.expand_dims(resized, axis=-1)
+    resized = np.expand_dims(resized, axis=0)  # Add batch dimension
 
     # Predict emotion
-    prediction = emotion_model.predict(face_reshaped)
-    emotion_index = np.argmax(prediction)
-    emotion = emotion_labels[emotion_index]
-    confidence = float(np.max(prediction))
+    predictions = emotion_model.predict(resized)
+    emotion_idx = np.argmax(predictions)
+    emotion = emotion_labels[emotion_idx]
+    confidence = float(np.max(predictions))
 
     return jsonify({
         'emotion': emotion,
-        'confidence': confidence
+        'confidence': round(confidence, 2)
     })
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # this line is very important
-    app.run(host="0.0.0.0", port=port)
 
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
