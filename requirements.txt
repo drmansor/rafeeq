@@ -1,5 +1,7 @@
 Flask
 flask_cors
+tensorflow-cpu
 opencv-python
 Pillow
+numpy
 gunicorn
