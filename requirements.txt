@@ -1,7 +1,8 @@
-Flask
-flask_cors
-tensorflow-cpu
+fastapi
+uvicorn
+fer
 opencv-python
-Pillow
+pillow
+python-multipart
 numpy
 gunicorn
