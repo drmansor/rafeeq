@@ -12,7 +12,7 @@ CORS(app)
 
 # Load models
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-emotion_model = load_model('emotion_model.h5')  # <- load your pre-trained emotion detection model
+emotion_model = load_model('emotion_model.hdf5')  # <- load your pre-trained emotion detection model
 
 # Emotion labels based on training
 emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
